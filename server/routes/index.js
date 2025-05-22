@@ -1,9 +1,11 @@
 const router = require("express").Router();
+const mongoose = require("mongoose");
 const passport = require("passport");
 const bcrypt = require("bcryptjs");
 const { StatusCodes, ReasonPhrases } = require("http-status-codes");
 const SavedGame = require("../model/SavedGame");
 const User = require("../model/User");
+const MatchHistory = require("../model/MatchHistory");
 
 router.post("/register", async (req, res) => {
 	try {
@@ -296,6 +298,125 @@ router.delete("/savegame/:gameId", async (req, res) => {
 	}
 });
 
+router.get("/getratings", async (req, res) => {
+	try {
+
+		const users = await User.find({}, 'username rating').sort({ rating: -1 });
+
+		return res.status(StatusCodes.OK).json({
+			users
+		});
+	} catch (error) {
+		console.log("Error:", error.message);
+		return res
+			.status(StatusCodes.INTERNAL_SERVER_ERROR)
+			.json({ error: ReasonPhrases.INTERNAL_SERVER_ERROR });
+	}
+});
+
+router.get("/gethistory/:username", async (req, res) => {
+	try {
+
+		// const user = req.user;
+		const username =req.params.username;
+
+		const matches = await MatchHistory.find({ username }).sort({ createdAt: -1 });
+
+		return res.status(StatusCodes.OK).json({
+			matches
+		});
+	} catch (error) {
+		console.log("Error:", error.message);
+		return res
+			.status(StatusCodes.INTERNAL_SERVER_ERROR)
+			.json({ error: ReasonPhrases.INTERNAL_SERVER_ERROR });
+	}
+});
+
+router.post("/rating", async (req, res) => {
+
+	const { winner, loser, draw } = req.body;
+
+	try {
+		const winnerUser = await User.findOne({ username: winner });
+		const loserUser = await User.findOne({ username: loser });
+
+		if (!winnerUser || !loserUser) {
+			return res.status(404).json({ error: "Users not found" });
+		}
+
+		const { newWinnerRating, newLoserRating, winnerChange, loserChange } = calculateElo(
+			winnerUser.rating,
+			loserUser.rating,
+			draw
+		);
+
+		winnerUser.rating = newWinnerRating;
+		loserUser.rating = newLoserRating;
+
+		await winnerUser.save();
+		await loserUser.save();
+
+		// Save match history correctly
+		const historyForWinner = new MatchHistory({
+			username: winner,
+			opponent: loser,
+			change: winnerChange,
+		});
+
+		const historyForLoser = new MatchHistory({
+			username: loser,
+			opponent: winner,
+			change: loserChange,
+		});
+
+		await historyForWinner.save();
+		await historyForLoser.save();
+
+		res.json({
+			success: true,
+			winner,
+			winnerRating: newWinnerRating,
+			loser,
+			loserRating: newLoserRating,
+		});
+	} catch (error) {
+		console.log(error)
+		return res
+			.status(StatusCodes.INTERNAL_SERVER_ERROR)
+			.json({ error: ReasonPhrases.INTERNAL_SERVER_ERROR });
+	}
+
+
+});
+
+function calculateElo(winnerRating, loserRating, draw = false) {
+	const K = 32;
+
+	const expectedScoreWinner =
+		1 / (1 + Math.pow(10, (loserRating - winnerRating) / 400));
+	const expectedScoreLoser = 1 - expectedScoreWinner;
+
+	let winnerScore = 1;
+	let loserScore = 0;
+
+	if (draw) {
+		winnerScore = 0.5;
+		loserScore = 0.5;
+	}
+
+	const newWinnerRating = Math.round(
+		winnerRating + K * (winnerScore - expectedScoreWinner)
+	);
+	const newLoserRating = Math.round(
+		loserRating + K * (loserScore - expectedScoreLoser)
+	);
+
+	const winnerChange = newWinnerRating - winnerRating ;
+	const loserChange = newLoserRating -loserRating ;
+
+	return { newWinnerRating, newLoserRating, winnerChange, loserChange };
+}
 
 
 module.exports = router;

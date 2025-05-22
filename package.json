@@ -1,0 +1,13 @@
+{
+  "name": "chess",
+  "version": "1.0.0",
+  "description": "A MERN-based Chess Web App",
+  "main": "server/server.js",
+  "scripts": {
+    "client:build": "cd client && npm install && npm run build",
+    "server:install": "cd server && npm install",
+    "start": "cd server && npm start"
+  },
+  "author": "karan matiyali",
+  "license": "ISC"
+}

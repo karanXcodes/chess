@@ -38,7 +38,7 @@ function BaseLayout({ children, handleThemeChange }) {
 		} else {
 			setCollapsed(collapsed);
 		}
-	};
+	}; 
 
 	const activePage = useRef([]);
 	const handleActivePage = (key) => {
